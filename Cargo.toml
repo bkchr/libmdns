@@ -17,7 +17,7 @@ multimap = "0.4"
 net2 = "0.2"
 nix = "0.10"
 rand = "0.5"
-tokio-core = "0.1"
+tokio = "0.1"
 quick-error = "1.2"
 
 [target.'cfg(windows)'.dependencies]

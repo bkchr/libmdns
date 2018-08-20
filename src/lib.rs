@@ -9,7 +9,7 @@ extern crate multimap;
 extern crate net2;
 extern crate nix;
 extern crate rand;
-extern crate tokio_core as tokio;
+extern crate tokio;
 
 use futures::Future;
 use futures::sync::mpsc;
@@ -17,7 +17,8 @@ use std::io;
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::cell::RefCell;
-use tokio::reactor::{Handle, Core};
+use tokio::reactor::Handle;
+use tokio::runtime::Runtime;
 
 mod dns_parser;
 use dns_parser::Name;
@@ -54,10 +55,10 @@ pub struct Service {
 type ResponderTask = Box<Future<Item=(), Error=io::Error> + Send>;
 
 impl Responder {
-    fn setup_core() -> io::Result<(Core, ResponderTask, Responder)> {
-        let core = Core::new()?;
-        let (responder, task) = Self::with_handle(&core.handle())?;
-        Ok((core, task, responder))
+    fn setup_runtime() -> io::Result<(Runtime, ResponderTask, Responder)> {
+        let rt = Runtime::new()?;
+        let (responder, task) = Self::with_handle(&rt.reactor())?;
+        Ok((rt, task, responder))
     }
 
     pub fn new() -> io::Result<Responder> {
@@ -65,10 +66,14 @@ impl Responder {
         thread::Builder::new()
             .name("mdns-responder".to_owned())
             .spawn(move || {
-                match Self::setup_core() {
-                    Ok((mut core, task, responder)) => {
+                match Self::setup_runtime() {
+                    Ok((mut rt, task, responder)) => {
                         tx.send(Ok(responder)).expect("tx responder channel closed");
-                        core.run(task).expect("mdns thread failed");
+                        rt.spawn(task.map_err(|e| {
+                            warn!("mdns error {:?}", e);
+                            ()
+                        }));
+                        rt.shutdown_on_idle().wait().expect("mdns thread failed");
                     }
                     Err(err) => {
                         tx.send(Err(err)).expect("tx responder channel closed");
@@ -79,9 +84,9 @@ impl Responder {
         rx.recv().expect("rx responder channel closed")
     }
 
-    pub fn spawn(handle: &Handle) -> io::Result<Responder> {
-        let (responder, task) = Responder::with_handle(handle)?;
-        handle.spawn(task.map_err(|e| {
+    pub fn spawn(rt: &mut Runtime) -> io::Result<Responder> {
+        let (responder, task) = Responder::with_handle(rt.reactor())?;
+        rt.spawn(task.map_err(|e| {
             warn!("mdns error {:?}", e);
             ()
         }));
@@ -99,7 +104,7 @@ impl Responder {
         let v4 = FSM::<Inet>::new(handle, &services);
         let v6 = FSM::<Inet6>::new(handle, &services);
 
-        let (task, commands) : (ResponderTask, _) = match (v4, v6) {
+        let (task, commands): (ResponderTask, _) = match (v4, v6) {
             (Ok((v4_task, v4_command)), Ok((v6_task, v6_command))) => {
                 let task = v4_task.join(v6_task).map(|((),())| ());
                 let task = Box::new(task);

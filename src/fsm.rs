@@ -1,7 +1,6 @@
 use dns_parser::{self, QueryClass, QueryType, Name, RRData};
 use std::collections::VecDeque;
 use std::io;
-use std::io::ErrorKind::WouldBlock;
 use std::marker::PhantomData;
 use std::net::{IpAddr, SocketAddr};
 use futures::{Poll, Async, Future, Stream};
@@ -39,7 +38,7 @@ impl <AF: AddressFamily> FSM<AF> {
         -> io::Result<(FSM<AF>, mpsc::UnboundedSender<Command>)>
     {
         let std_socket = AF::bind()?;
-        let socket = UdpSocket::from_socket(std_socket, handle)?;
+        let socket = UdpSocket::from_std(std_socket, handle)?;
         let (tx, rx) = mpsc::unbounded();
 
         let fsm = FSM {
@@ -56,9 +55,9 @@ impl <AF: AddressFamily> FSM<AF> {
     fn recv_packets(&mut self) -> io::Result<()> {
         let mut buf = [0u8; 4096];
         loop {
-            let (bytes, addr) = match self.socket.recv_from(&mut buf) {
-                Ok((bytes, addr)) => (bytes, addr),
-                Err(ref ioerr) if ioerr.kind() == WouldBlock => break,
+            let (bytes, addr) = match self.socket.poll_recv_from(&mut buf) {
+                Ok(Async::Ready((bytes, addr))) => (bytes, addr),
+                Ok(Async::NotReady) => break,
                 Err(err) => return Err(err),
             };
 
@@ -198,6 +197,7 @@ impl <AF: AddressFamily> FSM<AF> {
 impl <AF: AddressFamily> Future for FSM<AF> {
     type Item = ();
     type Error = io::Error;
+
     fn poll(&mut self) -> Poll<(), io::Error> {
         while let Async::Ready(cmd) = self.commands.poll().unwrap() {
             match cmd {
@@ -212,17 +212,15 @@ impl <AF: AddressFamily> Future for FSM<AF> {
             }
         }
 
-        while let Async::Ready(()) = self.socket.poll_read() {
-            self.recv_packets()?;
-        }
+        self.recv_packets()?;
 
         loop {
             if let Some(&(ref response, ref addr)) = self.outgoing.front() {
                 trace!("sending packet to {:?}", addr);
 
-                match self.socket.send_to(response, addr) {
-                    Ok(_) => (),
-                    Err(ref ioerr) if ioerr.kind() == WouldBlock => break,
+                match self.socket.poll_send_to(response, addr) {
+                    Ok(Async::Ready(_)) => (),
+                    Ok(Async::NotReady) => break,
                     Err(err) => warn!("error sending packet {:?}", err),
                 }
             } else {
