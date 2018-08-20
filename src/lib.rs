@@ -55,10 +55,12 @@ pub struct Service {
 type ResponderTask = Box<Future<Item=(), Error=io::Error> + Send>;
 
 impl Responder {
-    fn setup_runtime() -> io::Result<(Runtime, ResponderTask, Responder)> {
-        let rt = Runtime::new()?;
-        let (responder, task) = Self::with_handle(&rt.reactor())?;
-        Ok((rt, task, responder))
+    fn setup_runtime() -> io::Result<(Runtime, Responder)> {
+        Runtime::new().and_then(|mut rt|
+            Self::spawn(&mut rt).and_then(move |responder|
+                Ok((rt, responder))
+            )
+        )
     }
 
     pub fn new() -> io::Result<Responder> {
@@ -67,12 +69,8 @@ impl Responder {
             .name("mdns-responder".to_owned())
             .spawn(move || {
                 match Self::setup_runtime() {
-                    Ok((mut rt, task, responder)) => {
+                    Ok((rt, responder)) => {
                         tx.send(Ok(responder)).expect("tx responder channel closed");
-                        rt.spawn(task.map_err(|e| {
-                            warn!("mdns error {:?}", e);
-                            ()
-                        }));
                         rt.shutdown_on_idle().wait().expect("mdns thread failed");
                     }
                     Err(err) => {
