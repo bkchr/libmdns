@@ -10,6 +10,8 @@ extern crate net2;
 extern crate nix;
 extern crate rand;
 extern crate tokio;
+extern crate tokio_reactor;
+extern crate tokio_udp;
 
 use futures::Future;
 use futures::sync::mpsc;
@@ -17,8 +19,8 @@ use std::io;
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::cell::RefCell;
-use tokio::reactor::Handle;
 use tokio::runtime::Runtime;
+use tokio_reactor::Handle;
 
 mod dns_parser;
 use dns_parser::Name;

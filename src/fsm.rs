@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 use std::net::{IpAddr, SocketAddr};
 use futures::{Poll, Async, Future, Stream};
 use futures::sync::mpsc;
-use tokio::net::UdpSocket;
-use tokio::reactor::Handle;
+use tokio_reactor::Handle;
+use tokio_udp::UdpSocket;
 
 use super::{DEFAULT_TTL, MDNS_PORT};
 use address_family::AddressFamily;
