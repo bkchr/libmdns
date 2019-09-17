@@ -55,7 +55,7 @@ pub struct Service {
     _shutdown: Arc<Shutdown>,
 }
 
-type ResponderTask = Box<Future<Item = (), Error = io::Error> + Send>;
+pub type ResponderTask = Box<Future<Item = (), Error = io::Error> + Send>;
 
 impl Responder {
     fn setup_runtime() -> io::Result<(Runtime, Responder)> {
