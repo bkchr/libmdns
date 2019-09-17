@@ -185,7 +185,7 @@ struct CommandSender(Vec<mpsc::UnboundedSender<Command>>);
 impl CommandSender {
     fn send(&mut self, cmd: Command) {
         for tx in self.0.iter_mut() {
-            tx.unbounded_send(cmd.clone()).expect("responder died");
+            let _ = tx.unbounded_send(cmd.clone());
         }
     }
 
