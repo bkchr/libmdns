@@ -29,3 +29,5 @@ socket2 = "0.2.2"
 
 [dev-dependencies]
 env_logger = "0.5"
+
+[workspace]

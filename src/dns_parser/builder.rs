@@ -211,9 +211,7 @@ impl Builder<Additional> {
 
 #[cfg(test)]
 mod test {
-    use QueryType as QT;
-    use QueryClass as QC;
-    use Name;
+    use crate::dns_parser::{QueryType as QT, QueryClass as QC, Name};
     use super::Builder;
 
     #[test]
